@@ -1,0 +1,404 @@
+<!DOCTYPE HTML>
+<!--
+	Editorial by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+	<head>
+		<!-- Google tag (gtag.js) -->
+		<script async src="https://www.googletagmanager.com/gtag/js?id=G-28ESNSMYXM"></script>
+		<script>
+		window.dataLayer = window.dataLayer || [];
+		function gtag(){dataLayer.push(arguments);}
+		gtag('js', new Date());
+
+		gtag('config', 'G-28ESNSMYXM');
+		</script>
+		<title>How To Build A Highly Available EC2 Instance For Hosting A Web Application Using Infrastructure as Code</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+	</head>
+	<body class="is-preload">
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Main -->
+					<div id="main">
+						<div class="inner">
+
+							<!-- Header -->
+								<header id="header">
+									<a href="index.html" class="logo"><strong> Mr Dolapo Ajayi BSc MSc</strong> systems biology/omics/bioinformatics</a>
+									<ul class="icons">
+										<li><a href="https://x.com/MrBioinfx" class="icon brands fa-twitter"><span class="label">Twitter</span></a></li>
+										<li><a href="https://github.com/DolapoA" class="icon brands fa-github"><span class="label">Github</span></a></li>
+										<li><a href="https://www.linkedin.com/in/dolapo-ajayi-345540110/" class="icon brands fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									</ul>
+								</header>
+
+							<!-- Section -->
+							<section>
+								<h1>How I Built Highly Available Cloud Infrastructure For Hosting A Web Application</h1>
+								<h2>Using Infrastructure as Code (Terraform)</h2>
+									<p>Date: 15/03/2025</p>
+									<h4>Here I'll be walking you through how I setup the cloud infrastructure for hosting a web app on an EC2 instance in a way that ensures high availability for end users of the web app.
+										I will be focusing on key components of the architecture in the main.tf file.
+									</h4> 
+									<p>Some prerequisites required include:</p>
+									<ul>
+										<li>AWS Free Tier account setup</li>
+										<li>HCP Terraform account setup</li>
+										<li>Terraform installed on your computer</li>
+										<li>GitHub account</li>
+										<li>GitHub installed on your computer</li>
+									<br>
+									</ul>
+									<hr class="major" />
+									<h2>Figure 1: Architectural diagram</h2>
+									<img src="images/high_availability_EC2_with ELB_and_NAT.drawio_2.png" alt="" style="width: 90%; height: auto;" />
+									<figcaption style="text-align: center; font-style: italic; margin-top: 10px;">Figure 1: AWS High Availability Architecture - created using <a href="https://draw.io" target="_blank" rel="noopener noreferrer">draw.io</a></figcaption>
+								<br><br><br>
+									<h2>Cloud Components (AWS Services)</h2>
+									<div class="table-wrapper">
+										<table>
+											<thead>
+												<tr>
+													<th>Component</th>
+													<th>Purpose</th>
+												</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td>Virtual Private Cloud (VPC)</td>
+													<td>Isolated network environment for our resources</td>
+												</tr>
+												<tr>
+													<td>Public Subnets</td>
+													<td>Houses internet-facing components like load balancers</td>
+												</tr>
+												<tr>
+													<td>Private Subnets</td>
+													<td>Securely hosts EC2 instances away from direct internet access</td>
+												</tr>
+												<tr>
+													<td>Elastic Load Balancer (ELB)</td>
+													<td>Distributes traffic and provides failover capability - important for high availability</td>
+												</tr>
+												<tr>
+													<td>Network Address Translation (NAT) Gateway</td>
+													<td>Allows private instances to access internet while remaining secure</td>
+												</tr>
+												<tr>
+													<td>Elastic Compute Cloud (EC2)</td>
+													<td>Virtual server instances that host the web application</td>
+												</tr>
+												<tr>
+													<td>Amazon Machine Image (AMI)</td>
+													<td>Template containing software configuration used to create EC2 instances</td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+									<hr class="major" />
+									<br>
+									<h3>Terraform Project Structure (Key repository files)</h3>
+									<p>To implement Infrastructure as Code (IaC) with Terraform my Terraform repository included the following scripts:</p>
+									<ul>
+										<li><strong>main.tf</strong> - The main config file it contains resource definitions like VPCs, subnets, and EC2 instances and is where the core infrastructure is declared.</li>
+										<li><strong>terraform.tf</strong> (or versions.tf) - Contains Terraform settings including required providers, versions, and backend configuration for state storage.</li>
+										<li><strong>variables.tf</strong> - This script is where non-hardcoded variables can be stored, which can then be used throughout the configuration such as in the main.tf and the terraform.tf files.</li>
+										<li><strong>*.tfvars</strong> files - These contain variable values specific to the environment (e.g., terraform.auto.tfvars) that allow you to customize deployments for different environments without actually changing the core code.</li>
+										<li><strong>outputs.tf</strong> - This file contains the outputs from your infrastructure, IP addresses, DNS names, or resource IDs that could be used for reference in other systems.</li>
+									</ul>
+									<br>
+									<h2>Infrastructure Implementation - Terraform Code</h2>
+									<h3>1. VPC Configuration</h3>
+									<h4>The first component of consideration is the <u>VPC</u> in which the public and private subnets sit and their respective security groups.</h4>
+
+<pre><code class="language-hcl">
+module "vpc" {
+	source  = "terraform-aws-modules/vpc/aws"
+	version = "5.19.0" # updated to the latest on terraform registry - 13.03.2025
+	  
+	# allocates 65536 IP addresses to up to 65536 components in the VPC
+	cidr = var.vpc_cidr_block
+	  
+	azs = data.aws_availability_zones.available.names # 2 availability zones
+
+	# 2 private subnets, it allocates 256 IP addresses each
+	private_subnets = slice(var.private_subnet_cidr_blocks, 0, var.private_subnet_count)
+
+	# 2 public subnets, allocates 256 IP addresses each
+	public_subnets  = slice(var.public_subnet_cidr_blocks, 0, var.public_subnet_count)
+	  
+	enable_nat_gateway = true # Enable NAT gateway for instances to enable security updates
+	enable_vpn_gateway = var.enable_vpn_gateway # Allows the VPN gateway to be toggled for secure connections
+	  
+	tags = var.resource_tags
+}
+</code></pre>
+									<ul>
+										<li>With this VPC module I've created an isolated network with both public and private subnets across two availability zones to guarantee high availability.</li>
+										<li>The NAT gateway enables the private EC2 instances to access the internet for updates while remaining protected from direct external access.</li>
+										<li>Note that number of variables are not hard coded here, instead they're defined in the variables.tf file which I've touched on below.</li>
+									</ul>
+									<hr class="major" />
+									<br>
+
+									<h3>2. Adding Security Groups</h3>
+									<h4>The security groups define the permissions that will be assigned to specific components of the cloud infrastructure, in this case, the web app and the Elastic Load balancer</h4>
+
+<pre><code class="language-hcl">
+module "app_security_group" {
+	source  = "terraform-aws-modules/security-group/aws//modules/web"
+	version = "5.3.0" # updated to the latest on terraform registry - 13.03.2025
+	  
+	name        = "web-sg-${var.resource_tags["project"]}-${var.resource_tags["environment"]}"
+	description = "Security group for web-servers with HTTP ports open within VPC"
+	vpc_id      = module.vpc.vpc_id
+	  
+	# Allow traffic only from public subnets
+	ingress_cidr_blocks = module.vpc.public_subnets_cidr_blocks 
+	  
+	tags = var.resource_tags
+}
+	  
+module "lb_security_group" {
+	source  = "terraform-aws-modules/security-group/aws//modules/web"
+	version = "5.3.0" # updated to the latest on terraform registry - 13.03.2025
+	  
+	name        = "lb-sg-${var.resource_tags["project"]}-${var.resource_tags["environment"]}"
+	description = "Security group for load balancer with HTTP ports open within VPC"
+	# Security groups are VPC specific
+	vpc_id      = module.vpc.vpc_id
+	  
+	# Allows all traffic from the internet
+	ingress_cidr_blocks = ["0.0.0.0/0"] 
+	  
+	tags = var.resource_tags
+}
+</code></pre>
+
+									<ul>
+										<li>Security groups are VPC specific, and within a VPC they are component specific</li>
+										<li>Their associated ingress Classless Inter-Domain Route (CIDR) Block determines the source(s) that can access the component</li>
+										<li>Only traffic from the public subnet is permitted into the web app</li>
+										<li>Traffic from the internet is permitted into the Elastic Load Balancer</li>
+									</ul>
+									<hr class="major" />
+									<br>
+									<h3>3. Setting Up The Elastic Load Balancer</h3>
+									<h4>The Elastic Load balancer distributes traffic to EC2 instances as evenly as possible.</h4>
+
+<pre><code class="language-hcl">
+module "elb_http" {
+	source  = "terraform-aws-modules/elb/aws"
+	version = "4.0.2" # updated to the latest on terraform registry - 13.03.2025
+	  
+	# Ensure load balancer name is unique
+	name = "lb-${random_string.lb_id.result}-${var.resource_tags["project"]}-${var.resource_tags["environment"]}"
+	  
+	# Ensures that the load balancer is internet facing
+	internal = false
+	  
+	security_groups = [module.lb_security_group.security_group_id]
+	subnets         = module.vpc.public_subnets
+	  
+	number_of_instances = length(module.ec2_instances.instance_ids)
+	instances           = module.ec2_instances.instance_ids
+	  
+	listener = [{
+	  instance_port     = "80"
+	  instance_protocol = "HTTP"
+	  lb_port           = "80"
+	  lb_protocol       = "HTTP"
+	}]
+	  
+	# Check instance health by sending HTTP requests
+	health_check = {
+	  target              = "HTTP:80/index.html"
+	  interval            = 10 # number of seconds per check
+	  healthy_threshold   = 3  # number of consecutive successful checks for an instance to be considered healthy
+	  unhealthy_threshold = 10 # number of consecutive unsuccessful checks for an instance to be considered unhealthy
+	  timeout             = 5  # number of seconds to wait before declaring the health check as failed
+	}
+	  
+	tags = var.resource_tags
+}
+</code></pre>
+
+									<ul>
+										<li>The ELB is prevents overloading of any one particular EC2 instance by checking the health of the Web app</li>
+										<li>It ensures that the end user feels minimal disruption whilst interacting with the web app</li>
+										<li>If one EC2 instance fails traffic can be redirected to another EC2 instance</li>
+									</ul>
+									<hr class="major" />
+									<br>
+									<h3>4. Setting Up The Elastic Compute Cloud</h3>
+									<h4>The EC2 provides the compute capacity required to run the web app.</h4>
+
+<pre><code class="language-hcl">
+module "ec2_instances" {
+	source = "./modules/aws-instance"
+	  
+	depends_on = [module.vpc]
+	  
+	instance_count     = var.instance_count
+	instance_type      = var.ec2_instance_type
+	subnet_ids         = module.vpc.private_subnets[*]
+	security_group_ids = [module.app_security_group.security_group_id]
+	  
+	tags = var.resource_tags
+}
+</code></pre>
+
+									<ul>
+										<li>Two EC2 are defined and each EC2 is kept in a separate private subnet</li>
+										<li>The "depends_on" code is a meta-argument that informs Terraform to provision the EC2 only after the VPC has been setup. </li>
+										<li>The app security group is assigned to the EC2s </li>
+									</ul>
+									<hr class="major" />
+									<br>
+									<h3>Reflection</h3>
+									<p>One of the key concerns that all customers and users have when using a Cloud Services Platform instead of having an On-Premises setup is security. 
+										This is why questions of security ought to be asked from the beginning as the architecture is being designed and also when the prototype architecture has been completed.</p>
+										<p>With this in mind I would propose the following changes to bolster the security of this web app:</p>
+										<div class="table-wrapper">
+											<table>
+												<thead>
+													<tr>
+														<th>Area</th>
+														<th>Current</th>
+														<th>Suggested Improvement</th>
+													</tr>
+												</thead>
+												<tbody>
+													<tr>
+														<td>Load Balancer Protocol</td>
+														<td>HTTP (Port 80)</td>
+														<td>Switch to HTTPS (TLS, Port 443)</td>
+													</tr>
+													<tr>
+														<td>ELB Security Group Ingress</td>
+														<td>Open to 0.0.0.0/0</td>
+														<td>Restrict to trusted IPs, use WAF</td>
+													</tr>
+													<tr>
+														<td>Security Group Egress</td>
+														<td>Default allow all</td>
+														<td>Restrict egress traffic to specific needs</td>
+													</tr>
+													<tr>
+														<td>VPC Flow Logs</td>
+														<td>N/A</td>
+														<td>Enable for traffic monitoring & auditing</td>
+													</tr>
+													<tr>
+														<td>EC2 Access</td>
+														<td>N/A</td>
+														<td>Use AWS SSM Session Manager or CLI</td>
+													</tr>
+													<tr>
+														<td>Application Security Group Ingress</td>
+														<td>Allows public subnet CIDR blocks</td>
+														<td>Restrict to ELB Security Group only</td>
+													</tr>
+													<tr>
+														<td>Instance Hardening</td>
+														<td>N/A</td>
+														<td>Ensure latest patches, use IAM Roles</td>
+													</tr>
+													<tr>
+														<td>Identity & Access Management (IAM) & Multifactor Authentication (MFA)</td>
+														<td>N/A</td>
+														<td>Enforce MFA, apply least privilege IAM roles</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+										<h4>With these changes we minimise the <u>susceptibility to cyber penetration</u>, <u>accidental and deliberate data leakage</u>. It also improves <u>traceability of activity on the cloud</u>. 
+											It adds <u>multiple layers of protections</u> and it improves <u>compliance with regulations like GDPR</u>.</h4>
+											<br>
+											<br>
+										<p><b>Author: Dolapo Ajayi BSc MSc</b></p>
+							</section>
+
+										<div class="row gtr-200">
+											<div class="col-6 col-12-medium">
+
+
+											</div>
+										</div>
+
+								</section>
+
+						</div>
+					</div>
+
+				<!-- Sidebar -->
+					<div id="sidebar">
+						<div class="inner">
+
+							<!-- Search -->
+								<section id="search" class="alt">
+									<form method="post" action="#">
+										<input type="text" name="query" id="query" placeholder="Search" />
+									</form>
+								</section>
+
+							<!-- Menu -->
+								<nav id="menu">
+									<header class="major">
+										<h2>Menu</h2>
+									</header>
+									<ul>
+										<li><a href="index.html">Home</a></li>
+										<li><a href="blog.html">Blog</a></li>
+										<li><a href="cv_and_publications.html">CV & Publications</a></li>
+										<li><a href="about.html">About Me</a></li>
+									</ul>
+								</nav>
+
+							<!-- Section -->
+								<section>
+									<header class="major">
+										<h2>Mentorship & Career Advice</h2>
+									</header>
+									<p>I think it's important to assist others where possible. <br>If I can be of help in your bioinformatics career don't hesitate to contact me via LinkedIn.</p>
+								</section>
+								<section>
+									<header class="major">
+										<h2>Get in touch</h2>
+									</header>
+									<p>Let's talk bioinformatics and data science!</p>
+									<ul class="contact">
+										<li class="icon brands fa-linkedin"><a href="https://www.linkedin.com/in/dolapo-ajayi-345540110/" target="_blank" rel="reopener noreferrer"><span class="label">Dolapo Ajayi</span></a></li> 
+										<li class="icon brands fa-github"><a href="https://github.com/DolapoA" target="_blank" rel="reopener noreferrer"><span class="label">DolapoA-Repos</span></a></li>
+										<li class="icon solid fa-envelope"><a href="#">mrdajayi@gmail.com</a></li> 
+										<li class="icon brands fa-twitter"><a href="https://x.com/MrBioinfx" target="_blank" rel="reopener noreferrer"><span class="label">@MrBioinfx</span></a></li>
+										<li class="icon solid fa-home">London, England</li>
+									</ul>
+								</section>
+
+							<!-- Footer -->
+								<footer id="footer">
+									<p class="copyright">&copy; Dolapo Ajayi. All rights reserved. Design: <a href="https://html5up.net">HTML5 UP</a>.</p>
+								</footer>
+
+						</div>
+					</div>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>
